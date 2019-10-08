@@ -14,8 +14,10 @@ for server:
 
 for client:
 	
-	go run traffic-gen.go -mode client -p quic -a localhost:3030 -cc vegas -v
+	go run traffic-gen.go -mode client -p quic -a localhost:3030 -cc vegas 
 	
 -cc : 
 	
 	cubic, vegas or olia.
+	
+See the output of client terminal
