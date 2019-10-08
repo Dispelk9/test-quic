@@ -1,3 +1,5 @@
+This project based on quic-go lib of lucas-clemente and marten seermann.
+
 Using this code folder with mp-quic latency of vuva.
 
 Change the quic-go folder in mpquic-latency/mp-quicgo/src/github/lucas-clemente/quic-go
