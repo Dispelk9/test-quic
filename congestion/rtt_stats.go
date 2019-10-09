@@ -60,8 +60,8 @@ func (r *RTTStats) InitialRTTus() int64 { return r.initialRTTus }
 // MinRTT Returns the minRTT for the entire connection.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) MinRTT() time.Duration {
-	mrtt = r.minRTT
 	fmt.Println("minRTT inside function: ", r.minRTT)
+	mrtt = r.minRTT
 	return r.minRTT
 }
 
@@ -106,9 +106,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	// the client may cause a high ackDelay to result in underestimation of the
 	// r.minRTT.
 	if r.minRTT == 0 || r.minRTT > sendDelta {
-		r.minRTT = 20 //sendDelta
-	} else {
-		r.minRTT = 40
+		r.minRTT = sendDelta
 	}
 
 	r.updateRecentMinRTT(sendDelta, now)
@@ -120,9 +118,9 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	if sample > ackDelay {
 		sample -= ackDelay
 	}
-	r.minRTT = sample
+	//r.minRTT = sample
+	//fmt.Println("minRTT inside update: ", r.minRTT)
 
-	fmt.Println("minRTT inside update: ", r.minRTT)
 	r.latestRTT = sample
 	// First time call.
 	if r.smoothedRTT == 0 {
@@ -171,7 +169,7 @@ func (r *RTTStats) updateRecentMinRTT(sample time.Duration, now time.Time) { // 
 	} else if r.quarterWindowRTT.time.Before(now.Add(-time.Duration(float32(r.recentMinRTTwindow/time.Microsecond)*quarterWindow) * time.Microsecond)) {
 		r.quarterWindowRTT = rttSample{rtt: sample, time: now}
 	}
-	fmt.Println("minRTT inside after UpdateRecent: ", r.minRTT)
+	//fmt.Println("minRTT inside after UpdateRecent: ", r.minRTT)
 }
 
 // SampleNewRecentMinRTT forces RttStats to sample a new recent min rtt within the next
@@ -193,7 +191,7 @@ func (r *RTTStats) OnConnectionMigration() {
 	r.recentMinRTT = rttSample{}
 	r.halfWindowRTT = rttSample{}
 	r.quarterWindowRTT = rttSample{}
-	fmt.Println("minRTT inside onConnection: ", r.minRTT)
+	//fmt.Println("minRTT inside onConnection: ", r.minRTT)
 
 }
 
@@ -205,7 +203,7 @@ func (r *RTTStats) ExpireSmoothedMetrics() {
 	r.smoothedRTT = utils.MaxDuration(r.smoothedRTT, r.latestRTT)
 }
 
-// XXX (QDC): This is subject to improvement
+// UpdateSessionRTT XXX (QDC): This is subject to improvement
 // Update the smoothed RTT to the given value
 func (r *RTTStats) UpdateSessionRTT(smoothedRTT time.Duration) {
 	r.smoothedRTT = smoothedRTT

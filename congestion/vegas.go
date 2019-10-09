@@ -18,11 +18,13 @@ const (
 	numConnections = 2
 )
 
+// Try Based RTT
+var brtt float64 = 0.005
+
 // Vegas implements the vegas algorithm from TCP
 type Vegas struct {
 	// HybrindSlowStart works with slow start function
 	//HybridSlowStart HybridSlowStart
-	RTTStats RTTStats
 	//clock shows time
 	clock Clock
 	// Number of connections to simulate.
@@ -54,6 +56,8 @@ type Vegas struct {
 	BasedRtt time.Duration
 	// Observed RTT
 	ObRtt time.Duration
+	// MaxRTT Last max RTT
+	MaxRTT time.Duration
 }
 
 // Reset is called after a timeout to reset the vegas state
@@ -67,8 +71,8 @@ func (v *Vegas) Reset() {
 	v.estimatedTCPcongestionWindow = 0
 	v.originPointCongestionWindow = 0
 	v.lastTargetCongestionWindow = 0
-	v.BasedRtt = initialRTTus
-	v.ObRtt = initialRTTus
+	v.BasedRtt = 0
+	v.ObRtt = 0
 }
 
 //NewVegas returns a new Vegas instance
@@ -77,46 +81,64 @@ func NewVegas(ackedBytes protocol.ByteCount) *Vegas {
 	return v
 }
 
-// Difference Calculate the Difference
-func Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) time.Duration {
-	var Diff int64
-	if Basedrtt == 0 {
-		fmt.Println("Basedrtt is equal 0")
-		fmt.Println(Basedrtt, int64(Basedrtt))
-	} else if ObservedRtt == 0 {
-		//fmt.Println("Observed Rtt is equal 0")
-		ObservedRtt = initialRTTus
-		//fmt.Println(ObservedRtt, int64(ObservedRtt), mrtt, lrtt)
-	}
-	// Diff equal expected cwnd/basedrtt minus actual cwnd/observedrtt
-	Diff = int64(currentCongestionWindow)/int64(Basedrtt) - int64(currentCongestionWindow)/int64(ObservedRtt)
-	fmt.Println("Basedrtt: ", int64(Basedrtt), " Congestion: ", int64(currentCongestionWindow), " ObservedRtt: ", int64(ObservedRtt))
+// // Obcheck check if ObservedRTT too high or not
+// func (v *Vegas) Obcheck(ObservedRTT time.Duration) bool {
+// 	v.MaxRTT = 1
+// 	if ObservedRTT > v.MaxRTT {
 
-	return time.Duration(Diff)
+// 	}
+// 	return true
+// }
+
+// Difference Calculate the Difference
+func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) float64 {
+	var Diff float64
+	//currentCongestionWindow = currentCongestionWindow / 1350
+
+	if Basedrtt == 0 {
+		Basedrtt = 5 * 1000000
+	}
+	if ObservedRtt == 0 {
+		ObservedRtt = 7 * 1000000
+	}
+	if currentCongestionWindow == 0 {
+		currentCongestionWindow = 5 * 1350
+	}
+
+	// Diff equal expected cwnd/basedrtt minus actual cwnd/observedrtt
+	fmt.Println(float64(Basedrtt), float64(ObservedRtt), float64(currentCongestionWindow))
+	Diff = float64(currentCongestionWindow)/float64(Basedrtt) - float64(currentCongestionWindow)/float64(ObservedRtt)
+	fmt.Println("Basedrtt: ", Basedrtt, " Cwmd: ", currentCongestionWindow, " ObservedRtt: ", ObservedRtt, "Diff", Diff)
+
+	return Diff
 }
 
-// CwndVegasSS computes a new congestion window to use at the beginning or after
+// CwndVegasSS computes a new congestion window to use at the beginning or afterå
 // a loss event. Returns the new congestion window in packets.
 func (v *Vegas) CwndVegasSS(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
 	var lrtt1 = lrtt
 	var mrtt1 = mrtt
+	v.ObRtt = lrtt1
 	if v.BasedRtt == 0 {
-		v.BasedRtt = initialRTTus
+		v.BasedRtt = 5 * 1000000
+	} else if v.ObRtt < v.BasedRtt {
+		v.BasedRtt = v.ObRtt
 	}
-	var Diff time.Duration = Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
-	if int64(Diff) < Valpha/int64(v.BasedRtt) {
-		TarCwnd = TarCwnd + 1
 
-	} else if int64(Diff) >= Valpha/int64(v.BasedRtt) && int64(Diff) <= Vbeta/int64(v.BasedRtt) {
+	var Diff float64 = v.Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
+	if Diff < float64(Valpha)/float64(v.BasedRtt) {
+		TarCwnd = TarCwnd + 1350
+
+	} else if Diff >= float64(Valpha)/float64(v.BasedRtt) && float64(Diff) <= float64(Vbeta)/float64(v.BasedRtt) {
 		TarCwnd = currentCongestionWindow
 
-	} else if int64(Diff) > Vbeta/int64(v.BasedRtt) {
-		TarCwnd = TarCwnd - 1
-
+	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
+		TarCwnd = TarCwnd - 1350
 	}
-	//fmt.Println(TarCwnd, Diff, lrtt1, v.BasedRtt, "this works in SS")
-	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt, v.RTTStats.MinRTT(), "this works in SS")
+	fmt.Println("+++++++++ Slow Start +++++++++")
+	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt)
+	fmt.Println("++++++++++++++++++++++++++++++")
 	return TarCwnd
 }
 
@@ -126,21 +148,24 @@ func (v *Vegas) CwndVegasCA(currentCongestionWindow protocol.PacketNumber) proto
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
 	var lrtt1 = lrtt
 	var mrtt1 = mrtt
+	v.ObRtt = lrtt1
 	if v.BasedRtt == 0 {
-		v.BasedRtt = initialRTTus
+		v.BasedRtt = 5 * 1000000
+	} else if v.ObRtt < v.BasedRtt {
+		v.BasedRtt = v.ObRtt
 	}
-	var Diff time.Duration = Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
-	if int64(Diff) < Valpha/int64(v.BasedRtt) {
-		TarCwnd = TarCwnd + 1
+	var Diff float64 = v.Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
+	if Diff < float64(Valpha)/float64(v.BasedRtt) {
+		TarCwnd = TarCwnd + 1350
 
-	} else if int64(Diff) >= Valpha/int64(v.BasedRtt) && int64(Diff) <= Vbeta/int64(v.BasedRtt) {
+	} else if Diff >= float64(Valpha)/float64(v.BasedRtt) && float64(Diff) <= float64(Vbeta)/float64(v.BasedRtt) {
 		TarCwnd = currentCongestionWindow
 
-	} else if int64(Diff) > Vbeta/int64(v.BasedRtt) {
-		TarCwnd = TarCwnd - 1
-
+	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
+		TarCwnd = TarCwnd - 1350
 	}
-	//fmt.Println(TarCwnd, Diff, lrtt1, v.BasedRtt, "this works in SS")
-	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt, v.RTTStats.MinRTT(), "this works in CA")
+	fmt.Println("+++++++++ Congestion Avoidance +++++++++")
+	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt)
+	fmt.Println("++++++++++++++++++++++++++++++++++++++++")
 	return TarCwnd
 }

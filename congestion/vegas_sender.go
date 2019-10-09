@@ -71,18 +71,15 @@ func NewVegasSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 
 // OnPacketSent for vegas
 func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	// Only update bytesInFlight for data packets.
-	// if v.InRecovery() {
-	// 	v.congestionWindow = v.vegas.CwndVegasInCA(protocol.PacketNumber(bytesInFlight))
-	// }
-	if v.InSlowStart() {
-		//v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
-		v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight) / 1350)
+	var checktime = lrtt
+	var maxRTT float64 = 0.005
+
+	if checktime > time.Duration(maxRTT) {
+		v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
 	} else {
-		//v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-		v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight) / 1350) //(v.initialMaxCongestionWindow)
+		v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
 	}
-	//v.hybridSlowStart.OnPacketSent(packetNumber)
+
 	return true
 }
 

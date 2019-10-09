@@ -173,9 +173,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		return errPacketNumberNotIncreasing
 	}
 
-	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
-		return ErrTooManyTrackedSentPackets
-	}
+	// if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
+	// 	return ErrTooManyTrackedSentPackets
+	// }
 
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.skippedPackets = append(h.skippedPackets, p)
