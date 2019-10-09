@@ -68,8 +68,10 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
-	congestion congestion.SendAlgorithm
-	rttStats   *congestion.RTTStats
+	congestion  congestion.SendAlgorithm
+	congestion2 congestion.SendAlgorithmVegas
+
+	rttStats *congestion.RTTStats
 
 	onRTOCallback func(time.Time) bool
 
@@ -146,7 +148,7 @@ func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.Se
 		packetHistory:      NewPacketList(),
 		stopWaitingManager: stopWaitingManager{},
 		rttStats:           rttStats,
-		congestion:         congestionControl,
+		congestion2:        congestionControl,
 		onRTOCallback:      onRTOCallback,
 		pathID:             pathID,
 		onAckCallback:      onAckCallback,

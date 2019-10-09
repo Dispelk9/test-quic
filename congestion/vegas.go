@@ -121,7 +121,7 @@ func (v *Vegas) CwndVegasSS(currentCongestionWindow protocol.PacketNumber) proto
 	var mrtt1 = mrtt
 	v.ObRtt = lrtt1
 	if v.BasedRtt == 0 {
-		v.BasedRtt = 5 * 1000000
+		v.BasedRtt = 5 * 100000000
 	} else if v.ObRtt < v.BasedRtt {
 		v.BasedRtt = v.ObRtt
 	}

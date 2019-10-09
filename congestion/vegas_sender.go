@@ -71,38 +71,43 @@ func NewVegasSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 
 // OnPacketSent for vegas
 func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	var checktime = lrtt
-	var maxRTT float64 = 0.005
 
-	if checktime > time.Duration(maxRTT) {
+	if v.InRecovery() {
 		v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-	} else {
+	} else if v.InSlowStart() {
 		v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
 	}
 
+	v.hybridSlowStart.OnPacketSent(protocol.PacketNumber(bytesInFlight))
 	return true
 }
 
+// Called when we receive an ack. Normal TCP tracks how many packets one ack
+// represents, but quic has a separate ack for each packet.
+
 // OnPacketAcked for vegas
-func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	// if v.InRecovery() {
-	// 	v.congestionWindow = v.vegas.CwndVegasInCA(protocol.PacketNumber(bytesInFlight))
-	// }
-	// if v.InSlowStart() {
-	//v.congestionWindow = v.vegas.CwndVegas(protocol.PacketNumber(bytesInFlight))
-	//}
-}
+//func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+// var checktime = lrtt
+// var maxRTT time.Duration = 1e8
+// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
+// if checktime > maxRTT {
+// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
+// } else {
+// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+// }
+//}
 
 // OnPacketLost for vegas
-func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	// if v.InRecovery() {
-	// 	v.congestionWindow = v.vegas.CwndVegasInCA(protocol.PacketNumber(bytesInFlight))
-	// }
-	// if v.InSlowStart() {
-	//v.congestionWindow = v.vegas.CwndVegas(protocol.PacketNumber(bytesInFlight))
-	//}
-
-}
+//func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+// var checktime = lrtt
+// var maxRTT time.Duration = 1e8
+// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
+// if checktime > maxRTT {
+// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
+// } else {
+// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+// }
+//}
 
 // MaybeExitSlowStart for vegas
 func (v *VegasSender) MaybeExitSlowStart() {
