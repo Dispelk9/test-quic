@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -73,15 +74,6 @@ func NewVegasSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 
 // OnPacketSent for vegas
 func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	// fmt.Println("Get in this function")
-	// if !isRetransmittable {
-
-	// 	return false
-	// }
-	// v.congestionWindow = v.vegas.CwndVegasduringCA(protocol.PacketNumber(bytesInFlight))
-
-	// v.hybridSlowStart.OnPacketSent(packetNumber)
-	// return true
 	// Only update bytesInFlight for data packets.
 	if !isRetransmittable {
 
@@ -107,10 +99,9 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	return true
 }
 
+// OnPacketAcked for vegas
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
 // represents, but quic has a separate ack for each packet.
-
-// OnPacketAcked for vegas
 func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
 	v.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, v.largestAckedPacketNumber)
 	if v.InRecovery() {
@@ -118,9 +109,6 @@ func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 		if !v.noPRR {
 			v.prr.OnPacketAcked(ackedBytes)
 		}
-		Evaluate3 = false
-		Evaluate2 = false
-		Evaluate1 = v.InRecovery()
 		return
 	}
 	v.maybeIncreaseCwndVegas(ackedPacketNumber, ackedBytes, bytesInFlight)
@@ -139,7 +127,6 @@ func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes
 				if v.stats.slowstartPacketsLost == 1 || (v.stats.slowstartBytesLost/protocol.DefaultTCPMSS) > (v.stats.slowstartBytesLost-lostBytes)/protocol.DefaultTCPMSS {
 					// Reduce congestion window by 1 for every mss of bytes lost.
 					v.congestionWindow = utils.MaxPacketNumber(v.congestionWindow-1, v.minCongestionWindow)
-
 				}
 				v.slowstartThreshold = v.congestionWindow
 			}
@@ -276,6 +263,16 @@ func (v *VegasSender) maybeIncreaseCwndVegas(ackedPacketNumber protocol.PacketNu
 
 	// 	return
 	// }
+
+	var BaseRTT time.Duration = mrtt
+	var ObsRTT time.Duration = lrtt
+	//var MinRtt time.Duration = mrtt
+
+	var Ex = float64(bytesInFlight/1350) / float64(BaseRTT)
+	var Act = float64(bytesInFlight/1350) / float64(ObsRTT)
+	if Ex > Act {
+		return
+	}
 	if v.congestionWindow >= v.maxTCPCongestionWindow {
 		return
 	}
@@ -286,20 +283,21 @@ func (v *VegasSender) maybeIncreaseCwndVegas(ackedPacketNumber protocol.PacketNu
 		// 	c.congestionWindow = 35
 		// }
 		return
-	}
-	if v.reno {
-		// Classic Reno congestion avoidance.
-		v.congestionWindowCount++
-		// Divide by num_connections to smoothly increase the CWND at a faster
-		// rate than conventional Reno.
-		if protocol.PacketNumber(v.congestionWindowCount*protocol.ByteCount(v.numConnections)) >= v.congestionWindow {
-			v.congestionWindow++
-			// if c.congestionWindow > 50 {
-			// 	c.congestionWindow = 35
-			// }
-			v.congestionWindowCount = 0
-		}
+		//}
+		// if v.reno {
+		// 	// Classic Reno congestion avoidance.
+		// 	v.congestionWindowCount++
+		// 	// Divide by num_connections to smoothly increase the CWND at a faster
+		// 	// rate than conventional Reno.
+		// 	if protocol.PacketNumber(v.congestionWindowCount*protocol.ByteCount(v.numConnections)) >= v.congestionWindow {
+		// 		v.congestionWindow++
+		// 		// if c.congestionWindow > 50 {
+		// 		// 	c.congestionWindow = 35
+		// 		// }
+		// 		v.congestionWindowCount = 0
+		// 	}
 	} else {
 		v.congestionWindow = utils.MinPacketNumber(v.maxTCPCongestionWindow, v.vegas.CwndVegasduringCA(v.congestionWindow))
 	}
+	fmt.Println("MinRTT: ", mrtt, "LatestRTT", lrtt, "Ex:", Ex, "Act", Act, "v.MaxTCPcwnd", v.maxTCPCongestionWindow, "cwndvegasduringCA", v.congestionWindow)
 }
