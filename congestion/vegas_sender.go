@@ -86,28 +86,28 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 // represents, but quic has a separate ack for each packet.
 
 // OnPacketAcked for vegas
-//func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-// var checktime = lrtt
-// var maxRTT time.Duration = 1e8
-// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
-// if checktime > maxRTT {
-// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-// } else {
-// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
-// }
-//}
+func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+	// var checktime = lrtt
+	// var maxRTT time.Duration = 1e8
+	// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
+	// if checktime > maxRTT {
+	// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
+	// } else {
+	// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+	// }
+}
 
 // OnPacketLost for vegas
-//func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-// var checktime = lrtt
-// var maxRTT time.Duration = 1e8
-// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
-// if checktime > maxRTT {
-// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-// } else {
-// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
-// }
-//}
+func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+	// var checktime = lrtt
+	// var maxRTT time.Duration = 1e8
+	// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
+	// if checktime > maxRTT {
+	// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
+	// } else {
+	// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+	// }
+}
 
 // MaybeExitSlowStart for vegas
 func (v *VegasSender) MaybeExitSlowStart() {
