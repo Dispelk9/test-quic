@@ -15,6 +15,8 @@ type VegasSender struct {
 	stats           connectionStats
 	vegas           *Vegas
 	vegasSenders    map[protocol.PathID]*VegasSender
+	noPRR           bool
+	reno            bool
 
 	// Track the largest packet that has been sent.
 	largestSentPacketNumber protocol.PacketNumber
@@ -71,14 +73,37 @@ func NewVegasSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 
 // OnPacketSent for vegas
 func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
+	// fmt.Println("Get in this function")
+	// if !isRetransmittable {
 
+	// 	return false
+	// }
+	// v.congestionWindow = v.vegas.CwndVegasduringCA(protocol.PacketNumber(bytesInFlight))
+
+	// v.hybridSlowStart.OnPacketSent(packetNumber)
+	// return true
+	// Only update bytesInFlight for data packets.
+	if !isRetransmittable {
+
+		return false
+	}
 	if v.InRecovery() {
-		v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-	} else if v.InSlowStart() {
-		v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+		// PRR is used when in recovery.
+		Evaluate3 = false
+		Evaluate2 = false
+		Evaluate1 = v.InRecovery()
+		v.prr.OnPacketSent(bytes)
+
+	} else if v.InSlowStart() == true {
+		//fmt.Println("InSlowStart")
+		Evaluate1 = false
+		Evaluate2 = v.InSlowStart()
+		Evaluate3 = false
 	}
 
-	v.hybridSlowStart.OnPacketSent(protocol.PacketNumber(bytesInFlight))
+	v.largestSentPacketNumber = packetNumber
+	//c.Printschedule(c.congestionWindow)
+	v.hybridSlowStart.OnPacketSent(packetNumber)
 	return true
 }
 
@@ -87,26 +112,62 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 
 // OnPacketAcked for vegas
 func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	// var checktime = lrtt
-	// var maxRTT time.Duration = 1e8
-	// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
-	// if checktime > maxRTT {
-	// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-	// } else {
-	// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
-	// }
+	v.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, v.largestAckedPacketNumber)
+	if v.InRecovery() {
+		// PRR is used when in recovery.
+		if !v.noPRR {
+			v.prr.OnPacketAcked(ackedBytes)
+		}
+		Evaluate3 = false
+		Evaluate2 = false
+		Evaluate1 = v.InRecovery()
+		return
+	}
+	v.maybeIncreaseCwndVegas(ackedPacketNumber, ackedBytes, bytesInFlight)
+	if v.InSlowStart() {
+		v.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
+	}
 }
 
 // OnPacketLost for vegas
 func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	// var checktime = lrtt
-	// var maxRTT time.Duration = 1e8
-	// fmt.Println("Check time: ", checktime, "fix maxRTT: ", maxRTT) //bh check time cung nho hon
-	// if checktime > maxRTT {
-	// 	v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
-	// } else {
-	// 	v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
-	// }
+	if packetNumber <= v.largestSentAtLastCutback {
+		if v.lastCutbackExitedSlowstart {
+			v.stats.slowstartPacketsLost++
+			v.stats.slowstartBytesLost += lostBytes
+			if v.slowStartLargeReduction {
+				if v.stats.slowstartPacketsLost == 1 || (v.stats.slowstartBytesLost/protocol.DefaultTCPMSS) > (v.stats.slowstartBytesLost-lostBytes)/protocol.DefaultTCPMSS {
+					// Reduce congestion window by 1 for every mss of bytes lost.
+					v.congestionWindow = utils.MaxPacketNumber(v.congestionWindow-1, v.minCongestionWindow)
+
+				}
+				v.slowstartThreshold = v.congestionWindow
+			}
+		}
+
+		return
+	}
+	v.lastCutbackExitedSlowstart = v.InSlowStart()
+	if v.InSlowStart() {
+		v.stats.slowstartPacketsLost++
+
+	}
+	v.prr.OnPacketLost(bytesInFlight)
+	// TODO(chromium): Separate out all of slow start into a separate class.
+	if v.slowStartLargeReduction && v.InSlowStart() {
+		v.congestionWindow = v.congestionWindow - 1
+
+	} else {
+		//v.congestionWindow = v.vegas.CongestionWindowAfterPacketLoss(v.congestionWindow)
+
+	}
+	// Enforce a minimum congestion window.
+	if v.congestionWindow < v.minCongestionWindow {
+		v.congestionWindow = v.minCongestionWindow
+
+	}
+	v.slowstartThreshold = v.congestionWindow
+	v.largestSentAtLastCutback = v.largestSentPacketNumber
 }
 
 // MaybeExitSlowStart for vegas
@@ -202,4 +263,43 @@ func (v *VegasSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCo
 		return 0
 	}
 	return utils.InfDuration
+}
+
+// Called when we receive an ack. Normal TCP tracks how many packets one ack
+// represents, but quic has a separate ack for each packet.
+func (v *VegasSender) maybeIncreaseCwndVegas(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+
+	// Do not increase the congestion window unless the sender is close to using
+	// the current window.
+	// if !v.isCwndLimited(bytesInFlight) {
+	// 	v.vegas.OnApplicationLimited()
+
+	// 	return
+	// }
+	if v.congestionWindow >= v.maxTCPCongestionWindow {
+		return
+	}
+	if v.InSlowStart() {
+		// TCP slow start, exponential growth, increase by one for each ACK.
+		v.congestionWindow++
+		// if c.congestionWindow > 50 {
+		// 	c.congestionWindow = 35
+		// }
+		return
+	}
+	if v.reno {
+		// Classic Reno congestion avoidance.
+		v.congestionWindowCount++
+		// Divide by num_connections to smoothly increase the CWND at a faster
+		// rate than conventional Reno.
+		if protocol.PacketNumber(v.congestionWindowCount*protocol.ByteCount(v.numConnections)) >= v.congestionWindow {
+			v.congestionWindow++
+			// if c.congestionWindow > 50 {
+			// 	c.congestionWindow = 35
+			// }
+			v.congestionWindowCount = 0
+		}
+	} else {
+		v.congestionWindow = utils.MinPacketNumber(v.maxTCPCongestionWindow, v.vegas.CwndVegasduringCA(v.congestionWindow))
+	}
 }

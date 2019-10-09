@@ -113,32 +113,20 @@ func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, cu
 	return Diff
 }
 
-// CwndVegasSS computes a new congestion window to use at the beginning or afterå
-// a loss event. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegasSS(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
-	var TarCwnd protocol.PacketNumber = currentCongestionWindow
-	var lrtt1 = lrtt
-	var mrtt1 = mrtt
-	v.ObRtt = lrtt1
-	if v.BasedRtt == 0 {
-		v.BasedRtt = 5 * 100000000
-	} else if v.ObRtt < v.BasedRtt {
-		v.BasedRtt = v.ObRtt
-	}
+// CwndVegasduringCA check if it is needed to change to CWND or not. Returns the new congestion window in packets.
+func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
+	var TarCwnd protocol.PacketNumber
+	//
+	// var Ex float64 = float64(currentCongestionWindow) / float64(v.BasedRtt)
 
-	var Diff float64 = v.Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
-	if Diff < float64(Valpha)/float64(v.BasedRtt) {
-		TarCwnd = TarCwnd + 1350
-
-	} else if Diff >= float64(Valpha)/float64(v.BasedRtt) && float64(Diff) <= float64(Vbeta)/float64(v.BasedRtt) {
-		TarCwnd = currentCongestionWindow
-
-	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
-		TarCwnd = TarCwnd - 1350
-	}
-	fmt.Println("+++++++++ Slow Start +++++++++")
-	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt)
-	fmt.Println("++++++++++++++++++++++++++++++")
+	// var Act float64 = float64(currentCongestionWindow) / float64(lrtt)
+	// if Ex >= Act {
+	TarCwnd = v.CwndVegasCA(currentCongestionWindow)
+	// } else {
+	// 	// K update Congestion Window dua theo RTT
+	// 	TarCwnd = v.lastCongestionWindow
+	// }
+	//fmt.Println("Expected throughput ", Ex, "Actual throughput", Act, TarCwnd)
 	return TarCwnd
 }
 
@@ -167,5 +155,6 @@ func (v *Vegas) CwndVegasCA(currentCongestionWindow protocol.PacketNumber) proto
 	fmt.Println("+++++++++ Congestion Avoidance +++++++++")
 	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt)
 	fmt.Println("++++++++++++++++++++++++++++++++++++++++")
+	v.lastCongestionWindow = TarCwnd
 	return TarCwnd
 }

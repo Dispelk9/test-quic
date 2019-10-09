@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -60,7 +59,7 @@ func (r *RTTStats) InitialRTTus() int64 { return r.initialRTTus }
 // MinRTT Returns the minRTT for the entire connection.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) MinRTT() time.Duration {
-	fmt.Println("minRTT inside function: ", r.minRTT)
+	//fmt.Println("minRTT inside function: ", r.minRTT)
 	mrtt = r.minRTT
 	return r.minRTT
 }

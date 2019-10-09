@@ -136,7 +136,7 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlg
 }
 
 // NewVegasSentPacketHandler is an experimental PacketHandler for Vegas
-func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlgorithm, onRTOCallback func(time.Time) bool,
+func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlgorithmVegas, onRTOCallback func(time.Time) bool,
 	pathID protocol.PathID, onAckCallback func(protocol.PathID, protocol.PacketNumber)) SentPacketHandler {
 
 	var congestionControl congestion.SendAlgorithm
@@ -174,9 +174,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) error {
 		return errPacketNumberNotIncreasing
 	}
 
-	// if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
-	// 	return ErrTooManyTrackedSentPackets
-	// }
+	if protocol.PacketNumber(len(h.retransmissionQueue)+h.packetHistory.Len()+1) > protocol.MaxTrackedSentPackets {
+		return ErrTooManyTrackedSentPackets
+	}
 
 	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
 		h.skippedPackets = append(h.skippedPackets, p)
