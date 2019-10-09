@@ -21,7 +21,8 @@ const (
 // Vegas implements the vegas algorithm from TCP
 type Vegas struct {
 	// HybrindSlowStart works with slow start function
-	HybridSlowStart HybridSlowStart
+	//HybridSlowStart HybridSlowStart
+	RTTStats RTTStats
 	//clock shows time
 	clock Clock
 	// Number of connections to simulate.
@@ -77,19 +78,21 @@ func NewVegas(ackedBytes protocol.ByteCount) *Vegas {
 }
 
 // Difference Calculate the Difference
-func Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) int64 {
+func Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) time.Duration {
 	var Diff int64
 	if Basedrtt == 0 {
 		fmt.Println("Basedrtt is equal 0")
 		fmt.Println(Basedrtt, int64(Basedrtt))
 	} else if ObservedRtt == 0 {
-		fmt.Println("Observed Rtt is equal 0")
+		//fmt.Println("Observed Rtt is equal 0")
 		ObservedRtt = initialRTTus
-		fmt.Println(ObservedRtt, int64(ObservedRtt), mrtt, lrtt)
+		//fmt.Println(ObservedRtt, int64(ObservedRtt), mrtt, lrtt)
 	}
 	// Diff equal expected cwnd/basedrtt minus actual cwnd/observedrtt
 	Diff = int64(currentCongestionWindow)/int64(Basedrtt) - int64(currentCongestionWindow)/int64(ObservedRtt)
-	return Diff
+	fmt.Println("Basedrtt: ", int64(Basedrtt), " Congestion: ", int64(currentCongestionWindow), " ObservedRtt: ", int64(ObservedRtt))
+
+	return time.Duration(Diff)
 }
 
 // CwndVegasSS computes a new congestion window to use at the beginning or after
@@ -97,24 +100,23 @@ func Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentConges
 func (v *Vegas) CwndVegasSS(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
 	var lrtt1 = lrtt
+	var mrtt1 = mrtt
 	if v.BasedRtt == 0 {
 		v.BasedRtt = initialRTTus
 	}
-	var Diff int64 = Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
-	if Diff < Valpha/int64(v.BasedRtt) {
+	var Diff time.Duration = Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
+	if int64(Diff) < Valpha/int64(v.BasedRtt) {
 		TarCwnd = TarCwnd + 1
-		v.BasedRtt = mrtt
-		v.ObRtt = lrtt1
-	} else if Diff >= Valpha/int64(v.BasedRtt) && Diff <= Vbeta/int64(v.BasedRtt) {
+
+	} else if int64(Diff) >= Valpha/int64(v.BasedRtt) && int64(Diff) <= Vbeta/int64(v.BasedRtt) {
 		TarCwnd = currentCongestionWindow
-		v.BasedRtt = mrtt
-		v.ObRtt = lrtt1
-	} else if Diff > Vbeta/int64(v.BasedRtt) {
+
+	} else if int64(Diff) > Vbeta/int64(v.BasedRtt) {
 		TarCwnd = TarCwnd - 1
-		v.BasedRtt = mrtt
-		v.ObRtt = lrtt1
+
 	}
-	fmt.Println(TarCwnd, Diff, lrtt1, v.BasedRtt, "this works in SS")
+	//fmt.Println(TarCwnd, Diff, lrtt1, v.BasedRtt, "this works in SS")
+	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt, v.RTTStats.MinRTT(), "this works in SS")
 	return TarCwnd
 }
 
@@ -123,23 +125,22 @@ func (v *Vegas) CwndVegasSS(currentCongestionWindow protocol.PacketNumber) proto
 func (v *Vegas) CwndVegasCA(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
 	var lrtt1 = lrtt
+	var mrtt1 = mrtt
 	if v.BasedRtt == 0 {
 		v.BasedRtt = initialRTTus
 	}
-	var Diff int64 = Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
-	if Diff < Valpha/int64(v.BasedRtt) {
+	var Diff time.Duration = Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
+	if int64(Diff) < Valpha/int64(v.BasedRtt) {
 		TarCwnd = TarCwnd + 1
-		v.BasedRtt = mrtt
-		v.ObRtt = lrtt1
-	} else if Diff >= Valpha/int64(v.BasedRtt) && Diff <= Vbeta/int64(v.BasedRtt) {
+
+	} else if int64(Diff) >= Valpha/int64(v.BasedRtt) && int64(Diff) <= Vbeta/int64(v.BasedRtt) {
 		TarCwnd = currentCongestionWindow
-		v.BasedRtt = mrtt
-		v.ObRtt = lrtt1
-	} else if Diff > Vbeta/int64(v.BasedRtt) {
+
+	} else if int64(Diff) > Vbeta/int64(v.BasedRtt) {
 		TarCwnd = TarCwnd - 1
-		v.BasedRtt = mrtt
-		v.ObRtt = lrtt1
+
 	}
-	fmt.Println(TarCwnd, Diff, lrtt1, v.BasedRtt, v.ObRtt, mrtt, "this works in CA")
+	//fmt.Println(TarCwnd, Diff, lrtt1, v.BasedRtt, "this works in SS")
+	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt, v.RTTStats.MinRTT(), "this works in CA")
 	return TarCwnd
 }

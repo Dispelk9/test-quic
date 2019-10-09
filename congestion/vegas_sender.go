@@ -76,9 +76,11 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	// 	v.congestionWindow = v.vegas.CwndVegasInCA(protocol.PacketNumber(bytesInFlight))
 	// }
 	if v.InSlowStart() {
-		v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+		//v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight))
+		v.congestionWindow = v.vegas.CwndVegasSS(protocol.PacketNumber(bytesInFlight) / 1350)
 	} else {
-		v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
+		//v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight))
+		v.congestionWindow = v.vegas.CwndVegasCA(protocol.PacketNumber(bytesInFlight) / 1350) //(v.initialMaxCongestionWindow)
 	}
 	//v.hybridSlowStart.OnPacketSent(packetNumber)
 	return true

@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -59,6 +60,8 @@ func (r *RTTStats) InitialRTTus() int64 { return r.initialRTTus }
 // MinRTT Returns the minRTT for the entire connection.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) MinRTT() time.Duration {
+	mrtt = r.minRTT
+	fmt.Println("minRTT inside function: ", r.minRTT)
 	return r.minRTT
 }
 
@@ -103,8 +106,11 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	// the client may cause a high ackDelay to result in underestimation of the
 	// r.minRTT.
 	if r.minRTT == 0 || r.minRTT > sendDelta {
-		r.minRTT = sendDelta
+		r.minRTT = 20 //sendDelta
+	} else {
+		r.minRTT = 40
 	}
+
 	r.updateRecentMinRTT(sendDelta, now)
 
 	// Correct for ackDelay if information received from the peer results in a
@@ -114,6 +120,9 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	if sample > ackDelay {
 		sample -= ackDelay
 	}
+	r.minRTT = sample
+
+	fmt.Println("minRTT inside update: ", r.minRTT)
 	r.latestRTT = sample
 	// First time call.
 	if r.smoothedRTT == 0 {
@@ -130,13 +139,13 @@ func (r *RTTStats) updateRecentMinRTT(sample time.Duration, now time.Time) { // 
 		r.numMinRTTsamplesRemaining--
 		if r.newMinRTT.rtt == 0 || sample <= r.newMinRTT.rtt {
 			r.newMinRTT = rttSample{rtt: sample, time: now}
-			mrtt = r.newMinRTT.rtt
 		}
 		if r.numMinRTTsamplesRemaining == 0 {
 			r.recentMinRTT = r.newMinRTT
 			r.halfWindowRTT = r.newMinRTT
 			r.quarterWindowRTT = r.newMinRTT
 		}
+
 	}
 
 	// Update the three recent rtt samples.
@@ -162,6 +171,7 @@ func (r *RTTStats) updateRecentMinRTT(sample time.Duration, now time.Time) { // 
 	} else if r.quarterWindowRTT.time.Before(now.Add(-time.Duration(float32(r.recentMinRTTwindow/time.Microsecond)*quarterWindow) * time.Microsecond)) {
 		r.quarterWindowRTT = rttSample{rtt: sample, time: now}
 	}
+	fmt.Println("minRTT inside after UpdateRecent: ", r.minRTT)
 }
 
 // SampleNewRecentMinRTT forces RttStats to sample a new recent min rtt within the next
@@ -174,7 +184,7 @@ func (r *RTTStats) SampleNewRecentMinRTT(numSamples uint32) {
 // OnConnectionMigration is called when connection migrates and rtt measurement needs to be reset.
 func (r *RTTStats) OnConnectionMigration() {
 	r.latestRTT = 0
-	r.minRTT = 0
+	r.minRTT = 60
 	r.smoothedRTT = 0
 	r.meanDeviation = 0
 	r.initialRTTus = initialRTTus
@@ -183,6 +193,8 @@ func (r *RTTStats) OnConnectionMigration() {
 	r.recentMinRTT = rttSample{}
 	r.halfWindowRTT = rttSample{}
 	r.quarterWindowRTT = rttSample{}
+	fmt.Println("minRTT inside onConnection: ", r.minRTT)
+
 }
 
 // ExpireSmoothedMetrics causes the smoothed_rtt to be increased to the latest_rtt if the latest_rtt

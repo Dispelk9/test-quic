@@ -13,7 +13,7 @@ const NonForwardSecurePacketSizeReduction = 50
 // DefaultMaxCongestionWindow is the default for the max congestion window
 // XXX (QDC): with large bandwidth networks, this can be a limiting factor
 // Seems reasonable, around 3.5MB in flight
-const DefaultMaxCongestionWindow = 2500
+const DefaultMaxCongestionWindow = 60
 
 // InitialCongestionWindow is the initial congestion window in QUIC packets
 const InitialCongestionWindow = 1
