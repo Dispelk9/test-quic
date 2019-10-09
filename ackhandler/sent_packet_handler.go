@@ -137,7 +137,7 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlg
 }
 
 // NewVegasSentPacketHandler is an experimental PacketHandler for Vegas
-func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlgorithm, onRTOCallback func(time.Time) bool,
+func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlgorithmVegas, onRTOCallback func(time.Time) bool,
 	pathID protocol.PathID, onAckCallback func(protocol.PathID, protocol.PacketNumber)) SentPacketHandler {
 
 	var congestionControl congestion.SendAlgorithmVegas
