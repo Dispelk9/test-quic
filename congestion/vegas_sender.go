@@ -121,7 +121,7 @@ func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 
 // OnPacketLost for vegas
 func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	fmt.Println(" Packet lost")
+	fmt.Println(" Packet lost", v.congestionWindow, bytesInFlight)
 
 	v.lastCutbackExitedSlowstart = v.InSlowStart()
 	if v.InSlowStart() {
@@ -227,6 +227,7 @@ func (v *VegasSender) SetSlowStartLargeReduction(enabled bool) {
 // ExitSlowstart for vegas
 func (v *VegasSender) ExitSlowstart() {
 	v.slowstartThreshold = v.congestionWindow
+	fmt.Println("Exit SS")
 }
 
 // TimeUntilSend help something
@@ -256,8 +257,7 @@ func (v *VegasSender) maybeIncreaseCwndVegas(ackedPacketNumber protocol.PacketNu
 	var delta float64 = 0.5
 	var Ex = float64(bytesInFlight/1350) / float64(BaseRTT)
 	var Act = float64(bytesInFlight/1350) / float64(ObsRTT)
-	//fmt.Println("MinRTT: ", mrtt, "LatestRTT:", lrtt, "Ex:", Ex, "Act:", Act, "v.MaxTCPcwnd:", v.maxTCPCongestionWindow, "cwndvegas_computed:", v.congestionWindow)
-
+	fmt.Println("MinRTT: ", mrtt, "LatestRTT:", lrtt, "Ex:", Ex, "Act:", Act, "v.MaxTCPcwnd:", v.maxTCPCongestionWindow, "cwndvegas_computed:", v.congestionWindow)
 	if v.InSlowStart() {
 		//fmt.Println("Get in SS")
 		//Checking Expected and Act
