@@ -89,12 +89,13 @@ func (p *path) setup2(VegasSenders map[protocol.PathID]*congestion.VegasSender) 
 	p.rttStats = &congestion.RTTStats{}
 
 	var cong congestion.SendAlgorithmVegas
+	var checkDup = ackhandler.DupAck
 
-	cong = congestion.NewVegasSender(congestion.DefaultClock{}, p.rttStats, false, protocol.InitialCongestionWindow, protocol.DefaultMaxCongestionWindow)
+	cong = congestion.NewVegasSender(congestion.DefaultClock{}, p.rttStats, false, protocol.InitialCongestionWindow, protocol.DefaultMaxCongestionWindow, checkDup)
 	VegasSenders[p.pathID] = cong.(*congestion.VegasSender)
 
 	// func setup2 can't run without this line of code
-	sentPacketHandlerV := ackhandler.NewVegasSentPacketHandler(p.rttStats, cong, p.onRTO, p.pathID, p.sess.scheduler.crossAckHandling)
+	sentPacketHandlerV := ackhandler.NewVegasSentPacketHandler(p.rttStats, cong, p.onRTO, p.pathID, p.sess.scheduler.crossAckHandling, checkDup)
 
 	now := time.Now()
 

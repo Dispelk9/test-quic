@@ -112,28 +112,17 @@ func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 	}
 	v.maybeIncreaseCwndVegas(ackedPacketNumber, ackedBytes, bytesInFlight)
 	// if v.InSlowStart() {
+
 	// 	v.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
 	// }
-	fmt.Println("ackedPN", ackedPacketNumber, "ackedBytes", ackedBytes, "byteInFlight", bytesInFlight)
+	fmt.Println("++++++++++++++++++++++++++++++++++")
+	fmt.Println("ackedPN", ackedPacketNumber, "ackedBytes", ackedBytes, "byteInFlight", bytesInFlight, v.DupAck)
 }
 
 // OnPacketLost for vegas
 func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	if packetNumber <= v.largestSentAtLastCutback {
-		if v.lastCutbackExitedSlowstart {
-			v.stats.slowstartPacketsLost++
-			v.stats.slowstartBytesLost += lostBytes
-			if v.slowStartLargeReduction {
-				if v.stats.slowstartPacketsLost == 1 || (v.stats.slowstartBytesLost/protocol.DefaultTCPMSS) > (v.stats.slowstartBytesLost-lostBytes)/protocol.DefaultTCPMSS {
-					// Reduce congestion window by 1 for every mss of bytes lost.
-					v.congestionWindow = utils.MaxPacketNumber(v.congestionWindow-1, v.minCongestionWindow)
-				}
-				v.slowstartThreshold = v.congestionWindow
-			}
-		}
+	fmt.Println(" Packet lost")
 
-		return
-	}
 	v.lastCutbackExitedSlowstart = v.InSlowStart()
 	if v.InSlowStart() {
 		v.stats.slowstartPacketsLost++
@@ -141,13 +130,14 @@ func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes
 	}
 	v.prr.OnPacketLost(bytesInFlight)
 	// TODO(chromium): Separate out all of slow start into a separate class.
-	if v.slowStartLargeReduction && v.InSlowStart() {
-		v.congestionWindow = v.congestionWindow - 1
+	// if v.slowStartLargeReduction && v.InSlowStart() {
+	// 	v.congestionWindow = v.congestionWindow - 1
 
-	} else {
-		//v.congestionWindow = v.vegas.CongestionWindowAfterPacketLoss(v.congestionWindow)   // Check van de vegas lam gi khi bi drop packets
+	// } else {
+	// 	// After Packet Loss in CA
+	// 	v.congestionWindow = v.vegas.CwndVegascheckAPL(v.congestionWindow) // Check van de vegas lam gi khi bi drop packets
 
-	}
+	// }
 	// Enforce a minimum congestion window.
 	// if v.congestionWindow < v.minCongestionWindow {
 	// 	v.congestionWindow = v.minCongestionWindow
@@ -263,23 +253,23 @@ func (v *VegasSender) maybeIncreaseCwndVegas(ackedPacketNumber protocol.PacketNu
 	// }
 	var BaseRTT time.Duration = mrtt
 	var ObsRTT time.Duration = lrtt
-
+	var delta float64 = 0.5
 	var Ex = float64(bytesInFlight/1350) / float64(BaseRTT)
 	var Act = float64(bytesInFlight/1350) / float64(ObsRTT)
-	fmt.Println("MinRTT: ", mrtt, "LatestRTT", lrtt, "Ex:", Ex, "Act", Act, "v.MaxTCPcwnd", v.maxTCPCongestionWindow, "cwndvegasduringCA", v.congestionWindow)
-	if Ex > Act {
-		return
-	}
-	if v.congestionWindow >= v.maxTCPCongestionWindow {
-		return
-	}
-	if v.InSlowStart() {
-		// TCP Reno? slow start, exponential growth, increase by one for each ACK.
-		v.congestionWindow++
+	//fmt.Println("MinRTT: ", mrtt, "LatestRTT:", lrtt, "Ex:", Ex, "Act:", Act, "v.MaxTCPcwnd:", v.maxTCPCongestionWindow, "cwndvegas_computed:", v.congestionWindow)
 
-		return
+	if v.InSlowStart() {
+		//fmt.Println("Get in SS")
+		//Checking Expected and Act
+		if Ex-Act < delta {
+			v.congestionWindow++
+		} else {
+			v.ExitSlowstart()
+		}
+
 	} else {
-		v.congestionWindow = utils.MinPacketNumber(v.maxTCPCongestionWindow, v.vegas.CwndVegascheck(v.congestionWindow))
+		//fmt.Println("Get in CA")
+		v.congestionWindow = v.vegas.CwndVegascheckACK(v.congestionWindow)
 	}
 
 }

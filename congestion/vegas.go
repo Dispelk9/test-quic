@@ -81,14 +81,12 @@ func NewVegas(ackedBytes protocol.ByteCount) *Vegas {
 	return v
 }
 
-// // Obcheck check if ObservedRTT too high or not
-// func (v *Vegas) Obcheck(ObservedRTT time.Duration) bool {
-// 	v.MaxRTT = 1
-// 	if ObservedRTT > v.MaxRTT {
+// CwndVegascheckAPL check if it is needed to change to CWND or not. Returns the new congestion window in packets.
+func (v *Vegas) CwndVegascheckAPL(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
+	var TarCwnd protocol.PacketNumber
 
-// 	}
-// 	return true
-// }
+	return TarCwnd
+}
 
 // Difference Calculate the Difference
 func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) float64 {
@@ -113,26 +111,9 @@ func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, cu
 	return Diff
 }
 
-// CwndVegascheck check if it is needed to change to CWND or not. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegascheck(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
-	var TarCwnd protocol.PacketNumber
-	//
-	// var Ex float64 = float64(currentCongestionWindow) / float64(v.BasedRtt)
-
-	// var Act float64 = float64(currentCongestionWindow) / float64(lrtt)
-	// if Ex >= Act {
-	TarCwnd = v.CwndVegasCA(currentCongestionWindow)
-	// } else {
-	// 	// K update Congestion Window dua theo RTT
-	// 	TarCwnd = v.lastCongestionWindow
-	// }
-	//fmt.Println("Expected throughput ", Ex, "Actual throughput", Act, TarCwnd)
-	return TarCwnd
-}
-
-// CwndVegasCA computes a new congestion window to use at the beginning or after
+// CwndVegascheckACK computes a new congestion window to use at the beginning or after
 // a loss event. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegasCA(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
+func (v *Vegas) CwndVegascheckACK(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
 	var lrtt1 = lrtt
 	var mrtt1 = mrtt
@@ -144,13 +125,13 @@ func (v *Vegas) CwndVegasCA(currentCongestionWindow protocol.PacketNumber) proto
 	}
 	var Diff float64 = v.Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
 	if Diff < float64(Valpha)/float64(v.BasedRtt) {
-		TarCwnd = TarCwnd + 1350
+		TarCwnd = TarCwnd + 1
 
 	} else if Diff >= float64(Valpha)/float64(v.BasedRtt) && float64(Diff) <= float64(Vbeta)/float64(v.BasedRtt) {
 		TarCwnd = currentCongestionWindow
 
 	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
-		TarCwnd = TarCwnd - 1350
+		TarCwnd = TarCwnd - 1
 	}
 	fmt.Println("+++++++++ Congestion Avoidance +++++++++")
 	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt)
