@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"strconv"
@@ -260,13 +261,13 @@ pathLoop:
 		selectedPath = pth //s.paths[1] //pth
 		selectedPathID = pth.pathID
 		//	In Recovery 3, SlowStart 1, Congestion Avoidance 2
-		// if congestion.Evaluate1 == true {
-		// 	fmt.Println(pathID, pth.sentPacketHandler.GetCongestionWindow(), pth.sentPacketHandler.GetBytesInFlight(), pth.rttStats.SmoothedRTT(), time.Now().UnixNano(), 3)
-		// } else if congestion.Evaluate2 == true {
-		// 	fmt.Println(pathID, pth.sentPacketHandler.GetCongestionWindow(), pth.sentPacketHandler.GetBytesInFlight(), pth.rttStats.SmoothedRTT(), time.Now().UnixNano(), 1)
-		// } else if congestion.Evaluate1 != true && congestion.Evaluate2 != true {
-		// 	fmt.Println(pathID, pth.sentPacketHandler.GetCongestionWindow(), pth.sentPacketHandler.GetBytesInFlight(), pth.rttStats.SmoothedRTT(), time.Now().UnixNano(), 2)
-		// }
+		//if congestion.Evaluate1 == true {
+		fmt.Println(pathID, pth.sentPacketHandler.GetCongestionWindow(), pth.sentPacketHandler.GetBytesInFlight(), pth.rttStats.SmoothedRTT(), time.Now().UnixNano())
+		//} else if congestion.Evaluate2 == true {
+		//	fmt.Println(pathID, pth.sentPacketHandler.GetCongestionWindow(), pth.sentPacketHandler.GetBytesInFlight(), pth.rttStats.SmoothedRTT(), time.Now().UnixNano(), 1)
+		//} else if congestion.Evaluate1 != true && congestion.Evaluate2 != true {
+		//	fmt.Println(pathID, pth.sentPacketHandler.GetCongestionWindow(), pth.sentPacketHandler.GetBytesInFlight(), pth.rttStats.SmoothedRTT(), time.Now().UnixNano(), 2)
+		//	}
 	}
 
 	return selectedPath

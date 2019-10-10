@@ -137,11 +137,11 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlg
 
 // NewVegasSentPacketHandler is an experimental PacketHandler for Vegas
 func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.SendAlgorithmVegas, onRTOCallback func(time.Time) bool,
-	pathID protocol.PathID, onAckCallback func(protocol.PathID, protocol.PacketNumber)) SentPacketHandler {
-
+	pathID protocol.PathID, onAckCallback func(protocol.PathID, protocol.PacketNumber), checkDupAck bool) SentPacketHandler {
+	checkDupAck = DupAck
 	var congestionControl congestion.SendAlgorithm
 
-	congestionControl = congestion.NewVegasSender(congestion.DefaultClock{}, rttStats, false, protocol.InitialCongestionWindow, protocol.DefaultMaxCongestionWindow)
+	congestionControl = congestion.NewVegasSender(congestion.DefaultClock{}, rttStats, false, protocol.InitialCongestionWindow, protocol.DefaultMaxCongestionWindow, checkDupAck)
 
 	return &sentPacketHandler{
 		packetHistory:      NewPacketList(),

@@ -113,8 +113,8 @@ func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, cu
 	return Diff
 }
 
-// CwndVegasduringCA check if it is needed to change to CWND or not. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
+// CwndVegascheck check if it is needed to change to CWND or not. Returns the new congestion window in packets.
+func (v *Vegas) CwndVegascheck(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
 	var TarCwnd protocol.PacketNumber
 	//
 	// var Ex float64 = float64(currentCongestionWindow) / float64(v.BasedRtt)
