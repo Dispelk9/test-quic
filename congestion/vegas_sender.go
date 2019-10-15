@@ -8,6 +8,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// Pktl Count Packet lost
+var Pktl int
+
 // VegasSender is a Struct
 type VegasSender struct {
 	hybridSlowStart HybridSlowStart
@@ -79,72 +82,100 @@ func NewVegasSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 // OnPacketSent for vegas
 func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
 	// Only update bytesInFlight for data packets.
-	if !isRetransmittable {
-
-		return false
+	var latest = lrtt
+	var min = mrtt
+	var delay = ackd
+	var timeout time.Duration
+	var deltavalue float64 = 0.000005
+	// Checking if delay too high?
+	if delay > timeout {
+		// Timeout , retransmit immediately
+		// This part has done in sentpackethandler.go
 	}
-	if v.InRecovery() {
-		// PRR is used when in recovery.
-		v.prr.OnPacketSent(bytes)
+	// Incase min equal zero, set sample for minRTT
+	if min == 0 {
+		min = 5e6
 	}
 
-	if v.DupAck {
-		v.OnRetransmissionTimeout(true)
+	// Based Rtt equal min RTT
+	var BasedRtt = min
+	// Observed Rtt equal latest RTT
+	var Observed = latest
+
+	// So the expected throughput is
+	var Ex float64 = float64(bytesInFlight) / float64(BasedRtt)
+
+	// The actual throughput
+	var Act float64 = float64(bytesInFlight) / float64(Observed)
+
+	//Checking for new slow start
+	if Ex-Act < deltavalue {
+		if v.congestionWindow < 28 {
+			v.congestionWindow++
+		} else {
+			v.congestionWindow--
+		}
+	} else if Ex-Act > deltavalue {
+		// Expected congestion, start CA
+		v.ExitSlowstart()
+		v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
 	}
 
-	v.largestSentPacketNumber = packetNumber
+	//fmt.Println("Expected Throughput:", Ex, "Actual Throughput:", Act)
 
-	v.hybridSlowStart.OnPacketSent(packetNumber)
 	return true
 }
 
-// OnPacketAcked for vegas
-// Called when we receive an ack. Normal TCP tracks how many packets one ack
-// represents, but quic has a separate ack for each packet.
+// OnPacketAcked for vegas. Called when we receive an ack,, maybe occur in SS or CA
 func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	v.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, v.largestAckedPacketNumber)
-	if v.InRecovery() {
-		// PRR is used when in recovery.
-		if !v.noPRR {
-			v.prr.OnPacketAcked(ackedBytes)
+	v.congestionWindow = protocol.PacketNumber(bytesInFlight) / 1350
+	// If in slow start ,working normal
+	if v.InSlowStart() {
+		if v.congestionWindow < 28 {
+			v.congestionWindow++
+		} else {
+			v.congestionWindow--
 		}
-		return
-	}
-	v.maybeIncreaseCwndVegas(ackedPacketNumber, ackedBytes, bytesInFlight)
-	// if v.InSlowStart() {
+		// If in recovery, applied CA algorithms
+	} else if v.InRecovery() {
+		fmt.Println("In Recovery")
+		// always applies algorithms checking cwnd
+	} else {
+		// Always increase cwnd till max
+		if v.congestionWindow > protocol.DefaultMaxCongestionWindow {
+			v.congestionWindow = v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
+		} else {
+			// checking the RTT
+			if v.congestionWindow < 28 {
+				v.congestionWindow++
+			} else {
+				v.congestionWindow--
+			}
 
-	// 	v.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
-	// }
-	fmt.Println("++++++++++++++++++++++++++++++++++")
-	fmt.Println("ackedPN", ackedPacketNumber, "ackedBytes", ackedBytes, "byteInFlight", bytesInFlight, v.DupAck)
+		}
+
+	}
 }
 
-// OnPacketLost for vegas
+// OnPacketLost for vegas works when a packet is missing , maybe occur in SS or CA
 func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	fmt.Println(" Packet lost", v.congestionWindow, bytesInFlight)
+	// Count number pkt lost
+	Pktl = Pktl + 1
 
 	v.lastCutbackExitedSlowstart = v.InSlowStart()
 	if v.InSlowStart() {
 		v.stats.slowstartPacketsLost++
+	}
+	if v.InRecovery() {
+		fmt.Println("In Recovery")
+	} else {
+		//if Realtp < Expectedtp {
+		// After Packet Loss in CA
+		v.congestionWindow = v.vegas.CwndVegascheckAPL(v.congestionWindow, Pktl, bytesInFlight) // Check van de vegas lam gi khi bi drop packets
 
 	}
+
 	v.prr.OnPacketLost(bytesInFlight)
-	// TODO(chromium): Separate out all of slow start into a separate class.
-	// if v.slowStartLargeReduction && v.InSlowStart() {
-	// 	v.congestionWindow = v.congestionWindow - 1
-
-	// } else {
-	// 	// After Packet Loss in CA
-	// 	v.congestionWindow = v.vegas.CwndVegascheckAPL(v.congestionWindow) // Check van de vegas lam gi khi bi drop packets
-
-	// }
-	// Enforce a minimum congestion window.
-	// if v.congestionWindow < v.minCongestionWindow {
-	// 	v.congestionWindow = v.minCongestionWindow
-
-	// }
-	v.slowstartThreshold = v.congestionWindow
-	v.largestSentAtLastCutback = v.largestSentPacketNumber
 }
 
 // MaybeExitSlowStart for vegas
@@ -240,36 +271,4 @@ func (v *VegasSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCo
 		return 0
 	}
 	return utils.InfDuration
-}
-
-// Called when we receive an ack. Normal TCP tracks how many packets one ack
-// represents, but quic has a separate ack for each packet.
-func (v *VegasSender) maybeIncreaseCwndVegas(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	// Do not increase the congestion window unless the sender is close to using
-	// the current window.
-	// if !v.isCwndLimited(bytesInFlight) {
-	// 	v.vegas.OnApplicationLimited()
-
-	// 	return
-	// }
-	var BaseRTT time.Duration = mrtt
-	var ObsRTT time.Duration = lrtt
-	var delta float64 = 0.5
-	var Ex = float64(bytesInFlight/1350) / float64(BaseRTT)
-	var Act = float64(bytesInFlight/1350) / float64(ObsRTT)
-	fmt.Println("MinRTT: ", mrtt, "LatestRTT:", lrtt, "Ex:", Ex, "Act:", Act, "v.MaxTCPcwnd:", v.maxTCPCongestionWindow, "cwndvegas_computed:", v.congestionWindow)
-	if v.InSlowStart() {
-		//fmt.Println("Get in SS")
-		//Checking Expected and Act
-		if Ex-Act < delta {
-			v.congestionWindow++
-		} else {
-			v.ExitSlowstart()
-		}
-
-	} else {
-		//fmt.Println("Get in CA")
-		v.congestionWindow = v.vegas.CwndVegascheckACK(v.congestionWindow)
-	}
-
 }

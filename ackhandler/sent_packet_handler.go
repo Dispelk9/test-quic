@@ -142,7 +142,9 @@ func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.Se
 	var congestionControl congestion.SendAlgorithm
 
 	congestionControl = congestion.NewVegasSender(congestion.DefaultClock{}, rttStats, false, protocol.InitialCongestionWindow, protocol.DefaultMaxCongestionWindow, checkDupAck)
+	if checkDupAck() == true {
 
+	}
 	return &sentPacketHandler{
 		packetHistory:      NewPacketList(),
 		stopWaitingManager: stopWaitingManager{},
@@ -151,6 +153,13 @@ func NewVegasSentPacketHandler(rttStats *congestion.RTTStats, cong congestion.Se
 		onRTOCallback:      onRTOCallback,
 		pathID:             pathID,
 		onAckCallback:      onAckCallback,
+	}
+}
+
+func (h *sentPacketHandler) CheckDupVegas() bool {
+	// retransmit the last packet if has Duplicate ack or time out
+	if DupAck {
+		h.retransmitOldestPacket()
 	}
 }
 
@@ -227,6 +236,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	// duplicate or out-of-order ACK
 	if withPacketNumber <= h.largestReceivedPacketWithAck {
+		DupAck = true
 		return ErrDuplicateOrOutOfOrderAck
 	}
 	h.largestReceivedPacketWithAck = withPacketNumber

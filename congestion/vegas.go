@@ -81,17 +81,10 @@ func NewVegas(ackedBytes protocol.ByteCount) *Vegas {
 	return v
 }
 
-// CwndVegascheckAPL check if it is needed to change to CWND or not. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegascheckAPL(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
-	var TarCwnd protocol.PacketNumber
-
-	return TarCwnd
-}
-
-// Difference Calculate the Difference
+// Difference Calculate the Diff based on
+// Fairness Comparisons Between TCP Reno and TCP Vegas for Future Deployment of TCP Vegas
 func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) float64 {
 	var Diff float64
-	//currentCongestionWindow = currentCongestionWindow / 1350
 
 	if Basedrtt == 0 {
 		Basedrtt = 5 * 1000000
@@ -100,27 +93,40 @@ func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, cu
 		ObservedRtt = 7 * 1000000
 	}
 	if currentCongestionWindow == 0 {
-		currentCongestionWindow = 5 * 1350
+		currentCongestionWindow = 32
 	}
 
 	// Diff equal expected cwnd/basedrtt minus actual cwnd/observedrtt
-	fmt.Println(float64(Basedrtt), float64(ObservedRtt), float64(currentCongestionWindow))
 	Diff = float64(currentCongestionWindow)/float64(Basedrtt) - float64(currentCongestionWindow)/float64(ObservedRtt)
-	fmt.Println("Basedrtt: ", Basedrtt, " Cwmd: ", currentCongestionWindow, " ObservedRtt: ", ObservedRtt, "Diff", Diff)
+	//fmt.Println("Basedrtt: ", Basedrtt, " Cwmd: ", currentCongestionWindow, " ObservedRtt: ", ObservedRtt, "Diff", Diff)
 
 	return Diff
 }
 
-// CwndVegascheckACK computes a new congestion window to use at the beginning or after
+// CwndVegasduringCA computes a new congestion window to use at the beginning or after
 // a loss event. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegascheckACK(currentCongestionWindow protocol.PacketNumber) protocol.PacketNumber {
+func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber, biF protocol.ByteCount) protocol.PacketNumber {
+
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
+	if TarCwnd > 28 {
+		TarCwnd = 14
+	}
+	// Latest RTT from rtt_stats
 	var lrtt1 = lrtt
+	// Latest minRTT from rtt_stats
 	var mrtt1 = mrtt
+	// Observed RTT from latest RTT
 	v.ObRtt = lrtt1
+	//Checking if BasedRtt equal 0. Set a parameter for Based RTT
 	if v.BasedRtt == 0 {
 		v.BasedRtt = 5 * 1000000
-	} else if v.ObRtt < v.BasedRtt {
+	}
+	// If Basedrtt bigger that latest min RTT, get value from mrtt1
+	if v.BasedRtt > mrtt1 {
+		v.BasedRtt = mrtt1
+	}
+	// Checking if ObRTT is smaller than min RTT, if smaller get new BasedRTT
+	if v.ObRtt < v.BasedRtt {
 		v.BasedRtt = v.ObRtt
 	}
 	var Diff float64 = v.Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
@@ -133,9 +139,31 @@ func (v *Vegas) CwndVegascheckACK(currentCongestionWindow protocol.PacketNumber)
 	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
 		TarCwnd = TarCwnd - 1
 	}
-	fmt.Println("+++++++++ Congestion Avoidance +++++++++")
-	fmt.Println(TarCwnd, Diff, int64(Diff), lrtt1, v.ObRtt, mrtt1, v.BasedRtt)
+	fmt.Println("++++ ACK ++++")
+	fmt.Println("Tarcwnd in ACK:", TarCwnd, "Cwnd:", currentCongestionWindow, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
 	fmt.Println("++++++++++++++++++++++++++++++++++++++++")
 	v.lastCongestionWindow = TarCwnd
+	return TarCwnd
+}
+
+// CwndVegascheckAPL check if it is needed to change to CWND or not. Returns the new congestion window in packets.
+func (v *Vegas) CwndVegascheckAPL(currentCongestionWindow protocol.PacketNumber, packetlost int, biF protocol.ByteCount) protocol.PacketNumber {
+	var TarCwnd protocol.PacketNumber
+	var checking int = 1
+	if TarCwnd > 28 {
+		TarCwnd = 14
+	}
+	// Counting the packets lost , if the after 30th packet it still losing, it will decrease Cwnd/2
+	// If not, keep the cwnd.
+	if checking+29 < packetlost {
+		TarCwnd = currentCongestionWindow / 2
+	} else {
+		TarCwnd = currentCongestionWindow
+		checking = packetlost
+	}
+
+	fmt.Println("++++ APL ++++")
+	fmt.Println("TarCwnd in APL:", TarCwnd, "Cwnd:", currentCongestionWindow, "Packetlost count:", packetlost, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
+	fmt.Println("++++++++++++++++++++++++++++++++++++++++")
 	return TarCwnd
 }

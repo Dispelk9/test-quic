@@ -27,6 +27,9 @@ var lrtt time.Duration
 // mrtt is min rtt for vegas.go
 var mrtt time.Duration
 
+// Delay values
+var ackd time.Duration
+
 // RTTStats provides round-trip statistics
 type RTTStats struct {
 	initialRTTus int64
@@ -129,6 +132,8 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(utils.AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
 		r.smoothedRTT = time.Duration((float32(r.smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
 	}
+
+	ackd = ackDelay
 }
 
 func (r *RTTStats) updateRecentMinRTT(sample time.Duration, now time.Time) { // Recent minRTT update.
