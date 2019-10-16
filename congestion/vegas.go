@@ -16,10 +16,18 @@ const (
 	Vgamma int64 = 1
 	// numConnections
 	numConnections = 2
+	// Maxcwnd works as the max parameter so that the packets don't drop
+	Maxcwnd = 28
 )
 
 // Try Based RTT
 var brtt float64 = 0.005
+
+// checking first
+var checking int = 1
+
+// Delta var
+var Delta float64
 
 // Vegas implements the vegas algorithm from TCP
 type Vegas struct {
@@ -93,13 +101,13 @@ func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, cu
 		ObservedRtt = 7 * 1000000
 	}
 	if currentCongestionWindow == 0 {
-		currentCongestionWindow = 32
+		currentCongestionWindow = Maxcwnd
 	}
 
 	// Diff equal expected cwnd/basedrtt minus actual cwnd/observedrtt
 	Diff = float64(currentCongestionWindow)/float64(Basedrtt) - float64(currentCongestionWindow)/float64(ObservedRtt)
 	//fmt.Println("Basedrtt: ", Basedrtt, " Cwmd: ", currentCongestionWindow, " ObservedRtt: ", ObservedRtt, "Diff", Diff)
-
+	Delta = Diff
 	return Diff
 }
 
@@ -108,9 +116,9 @@ func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, cu
 func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber, biF protocol.ByteCount) protocol.PacketNumber {
 
 	var TarCwnd protocol.PacketNumber = currentCongestionWindow
-	if TarCwnd > 28 {
-		TarCwnd = 14
-	}
+	// if TarCwnd > Maxcwnd {
+	// 	TarCwnd = Maxcwnd
+	// }
 	// Latest RTT from rtt_stats
 	var lrtt1 = lrtt
 	// Latest minRTT from rtt_stats
@@ -139,9 +147,10 @@ func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber,
 	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
 		TarCwnd = TarCwnd - 1
 	}
-	fmt.Println("++++ ACK ++++")
-	fmt.Println("Tarcwnd in ACK:", TarCwnd, "Cwnd:", currentCongestionWindow, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
-	fmt.Println("++++++++++++++++++++++++++++++++++++++++")
+	//fmt.Println("++++ ACK ++++")
+	//fmt.Println("Tarcwnd in ACK:", TarCwnd, "Cwnd:", currentCongestionWindow, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
+	//fmt.Println("++++++++++++++++++++++++++++++++++++++++")
+	fmt.Println("LatestRTT", lrtt1, "timestamp", time.Now().Unix())
 	v.lastCongestionWindow = TarCwnd
 	return TarCwnd
 }
@@ -149,21 +158,20 @@ func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber,
 // CwndVegascheckAPL check if it is needed to change to CWND or not. Returns the new congestion window in packets.
 func (v *Vegas) CwndVegascheckAPL(currentCongestionWindow protocol.PacketNumber, packetlost int, biF protocol.ByteCount) protocol.PacketNumber {
 	var TarCwnd protocol.PacketNumber
-	var checking int = 1
-	if TarCwnd > 28 {
-		TarCwnd = 14
-	}
+	// if TarCwnd > Maxcwnd {
+	// 	TarCwnd = Maxcwnd / 2
+	// }
 	// Counting the packets lost , if the after 30th packet it still losing, it will decrease Cwnd/2
 	// If not, keep the cwnd.
 	if checking+29 < packetlost {
 		TarCwnd = currentCongestionWindow / 2
 	} else {
 		TarCwnd = currentCongestionWindow
-		checking = packetlost
+		//checking = packetlost
 	}
 
-	fmt.Println("++++ APL ++++")
-	fmt.Println("TarCwnd in APL:", TarCwnd, "Cwnd:", currentCongestionWindow, "Packetlost count:", packetlost, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
-	fmt.Println("++++++++++++++++++++++++++++++++++++++++")
+	//fmt.Println("++++ APL ++++")
+	//fmt.Println("TarCwnd in APL:", TarCwnd, "Cwnd:", currentCongestionWindow, "Packetlost count:", packetlost, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
+	//fmt.Println("++++++++++++++++++++++++++++++++++++++++")
 	return TarCwnd
 }

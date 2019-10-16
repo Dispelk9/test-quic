@@ -86,7 +86,7 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	var min = mrtt
 	var delay = ackd
 	var timeout time.Duration
-	var deltavalue float64 = 0.000005
+	var deltavalue float64 = Delta
 	// Checking if delay too high?
 	if delay > timeout {
 		// Timeout , retransmit immediately
@@ -95,6 +95,11 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	// Incase min equal zero, set sample for minRTT
 	if min == 0 {
 		min = 5e6
+	}
+	if v.congestionWindow < 28 {
+		v.congestionWindow++
+	} else {
+		v.congestionWindow--
 	}
 
 	// Based Rtt equal min RTT
@@ -117,7 +122,7 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 		}
 	} else if Ex-Act > deltavalue {
 		// Expected congestion, start CA
-		v.ExitSlowstart()
+		//v.ExitSlowstart()
 		v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
 	}
 
@@ -131,22 +136,22 @@ func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 	v.congestionWindow = protocol.PacketNumber(bytesInFlight) / 1350
 	// If in slow start ,working normal
 	if v.InSlowStart() {
-		if v.congestionWindow < 28 {
+		if v.congestionWindow < Maxcwnd {
 			v.congestionWindow++
 		} else {
 			v.congestionWindow--
 		}
 		// If in recovery, applied CA algorithms
 	} else if v.InRecovery() {
-		fmt.Println("In Recovery")
+		//fmt.Println("In Recovery")
 		// always applies algorithms checking cwnd
 	} else {
 		// Always increase cwnd till max
-		if v.congestionWindow > protocol.DefaultMaxCongestionWindow {
+		if v.congestionWindow > Maxcwnd {
 			v.congestionWindow = v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
 		} else {
 			// checking the RTT
-			if v.congestionWindow < 28 {
+			if v.congestionWindow < Maxcwnd {
 				v.congestionWindow++
 			} else {
 				v.congestionWindow--
@@ -165,8 +170,9 @@ func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes
 	v.lastCutbackExitedSlowstart = v.InSlowStart()
 	if v.InSlowStart() {
 		v.stats.slowstartPacketsLost++
-	}
-	if v.InRecovery() {
+	} else if v.congestionWindow > Maxcwnd {
+		v.congestionWindow = Maxcwnd / 2
+	} else if v.InRecovery() {
 		fmt.Println("In Recovery")
 	} else {
 		//if Realtp < Expectedtp {
@@ -258,7 +264,7 @@ func (v *VegasSender) SetSlowStartLargeReduction(enabled bool) {
 // ExitSlowstart for vegas
 func (v *VegasSender) ExitSlowstart() {
 	v.slowstartThreshold = v.congestionWindow
-	fmt.Println("Exit SS")
+	//fmt.Println("Exit SS")
 }
 
 // TimeUntilSend help something
