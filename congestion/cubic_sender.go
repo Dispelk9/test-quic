@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -154,7 +155,7 @@ func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	}
 
 	c.largestSentPacketNumber = packetNumber
-	//c.Printschedule(c.congestionWindow)
+	fmt.Println(c.congestionWindow, time.Now().UnixNano())
 	c.hybridSlowStart.OnPacketSent(packetNumber)
 	return true
 }

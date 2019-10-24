@@ -102,7 +102,7 @@ func (s *HybridSlowStart) OnPacketAcked(ackedPacketNumber protocol.PacketNumber)
 
 // Started returns true if started
 func (s *HybridSlowStart) Started() bool {
-	fmt.Println("Start Slow Start")
+	fmt.Println("StartSlowStart")
 	return s.started
 }
 
@@ -110,5 +110,5 @@ func (s *HybridSlowStart) Started() bool {
 func (s *HybridSlowStart) Restart() {
 	s.started = false
 	s.hystartFound = false
-	fmt.Println("Go to Slow Start Again ")
+	fmt.Println("GotoSlowStartAgain ")
 }

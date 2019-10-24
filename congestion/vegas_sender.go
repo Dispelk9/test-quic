@@ -94,12 +94,18 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	}
 	// Incase min equal zero, set sample for minRTT
 	if min == 0 {
-		min = 5e6
+		min = lrtt //Convert to millisecond
 	}
 	if v.congestionWindow < 28 {
 		v.congestionWindow++
 	} else {
-		v.congestionWindow--
+		v.congestionWindow = v.congestionWindow / 2
+	}
+	if v.InSlowStart() {
+		//fmt.Println(v.congestionWindow, "InSlowstart:", time.Now().UnixNano(), lrtt)
+	}
+	if v.InRecovery() {
+		//fmt.Println(v.congestionWindow, "InRecovery:", time.Now().UnixNano(), lrtt)
 	}
 
 	// Based Rtt equal min RTT
@@ -107,7 +113,7 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	// Observed Rtt equal latest RTT
 	var Observed = latest
 
-	// So the expected throughput is
+	// The expected throughput
 	var Ex float64 = float64(bytesInFlight) / float64(BasedRtt)
 
 	// The actual throughput
@@ -115,23 +121,24 @@ func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 
 	//Checking for new slow start
 	if Ex-Act < deltavalue {
-		if v.congestionWindow < 28 {
+		if v.congestionWindow < 28 { // Make the cwnd not get over the max link bandwidth
 			v.congestionWindow++
 		} else {
-			v.congestionWindow--
+			v.congestionWindow = v.congestionWindow / 2
 		}
+
 	} else if Ex-Act > deltavalue {
 		// Expected congestion, start CA
 		//v.ExitSlowstart()
 		v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
+		//fmt.Println(v.congestionWindow, "InCA:", time.Now().UnixNano(), lrtt)
 	}
-
 	//fmt.Println("Expected Throughput:", Ex, "Actual Throughput:", Act)
 
 	return true
 }
 
-// OnPacketAcked for vegas. Called when we receive an ack,, maybe occur in SS or CA
+// OnPacketAcked for vegas. Called when we receive an ack,, maybe occur in SS symbol(1) or CA symbol(0)
 func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
 	v.congestionWindow = protocol.PacketNumber(bytesInFlight) / 1350
 	// If in slow start ,working normal
@@ -139,9 +146,10 @@ func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 		if v.congestionWindow < Maxcwnd {
 			v.congestionWindow++
 		} else {
-			v.congestionWindow--
+			v.congestionWindow = v.congestionWindow / 2
 		}
-		// If in recovery, applied CA algorithms
+
+		// If in recovery, do nthing, cwnd stay the same
 	} else if v.InRecovery() {
 		//fmt.Println("In Recovery")
 		// always applies algorithms checking cwnd
@@ -151,15 +159,11 @@ func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ack
 			v.congestionWindow = v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
 		} else {
 			// checking the RTT
-			if v.congestionWindow < Maxcwnd {
-				v.congestionWindow++
-			} else {
-				v.congestionWindow--
-			}
-
+			v.congestionWindow++
 		}
 
 	}
+	fmt.Println("Timestamp", time.Now().UnixNano(), "LatestRTT", lrtt)
 }
 
 // OnPacketLost for vegas works when a packet is missing , maybe occur in SS or CA
