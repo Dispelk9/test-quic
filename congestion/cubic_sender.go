@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -105,35 +104,6 @@ func (c *cubicSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCo
 	return utils.InfDuration
 }
 
-// func Printschedule(f func()) {
-// 	// cog protocol.PacketNumber = 0, update value after each call
-// 	if  == f {
-// 		fmt.Println(f)
-// 		//time.Sleep(1 * time.Second)
-// 	} else {
-// 		//time.Sleep(1 * time.Second)
-// 		return
-// 	}
-// }
-
-// func schedule(logc func(), delay time.Duration) chan bool {
-// 	output := make(chan bool)
-
-// 	go func() {
-// 		for {
-// 			logc()
-// 			select {
-// 			case <-time.Tick(delay):
-// 				time.Sleep(5 * time.Millisecond)
-// 			case <-output:
-// 				return
-// 			}
-// 		}
-// 	}()
-
-// 	return output
-// }
-
 func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
 	// Only update bytesInFlight for data packets.
 	if !isRetransmittable {
@@ -155,7 +125,7 @@ func (c *cubicSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.By
 	}
 
 	c.largestSentPacketNumber = packetNumber
-	fmt.Println(c.congestionWindow, time.Now().UnixNano())
+	//fmt.Println(c.congestionWindow, time.Now().UnixNano()) // GET Cwnd values
 	c.hybridSlowStart.OnPacketSent(packetNumber)
 	return true
 }
@@ -291,9 +261,6 @@ func (c *cubicSender) maybeIncreaseCwnd(ackedPacketNumber protocol.PacketNumber,
 	if c.InSlowStart() {
 		// TCP slow start, exponential growth, increase by one for each ACK.
 		c.congestionWindow++
-		// if c.congestionWindow > 50 {
-		// 	c.congestionWindow = 35
-		// }
 		Evaluate1 = false
 		Evaluate2 = true
 		Evaluate3 = false

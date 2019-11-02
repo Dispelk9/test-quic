@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 	// numConnections
 	numConnections = 2
 	// Maxcwnd works as the max parameter so that the packets don't drop
-	Maxcwnd = 28
+	Maxcwnd = 30
 )
 
 // Try Based RTT
@@ -27,6 +28,9 @@ var checking int = 1
 
 // Delta var
 var Delta float64
+
+// sshthresh for vegassender
+var ss protocol.PacketNumber
 
 // Vegas implements the vegas algorithm from TCP
 type Vegas struct {
@@ -88,92 +92,117 @@ func NewVegas(ackedBytes protocol.ByteCount) *Vegas {
 	return v
 }
 
+// OnApplicationLimited help program not increase cwnd when not get ack values
+func (v *Vegas) OnApplicationLimited() {
+	if shiftQuicCubicEpochWhenAppLimited {
+		if v.appLimitedStartTime.IsZero() {
+			v.appLimitedStartTime = v.clock.Now()
+		}
+	} else {
+		// Epoch should not increase
+		v.epoch = time.Time{}
+	}
+}
+
 // Difference Calculate the Diff based on
 // Fairness Comparisons Between TCP Reno and TCP Vegas for Future Deployment of TCP Vegas
 func (v *Vegas) Difference(Basedrtt time.Duration, ObservedRtt time.Duration, currentCongestionWindow protocol.PacketNumber) float64 {
 	var Diff float64
 
 	if Basedrtt == 0 {
-		Basedrtt = 5 * 1000000 // change into millisecond
+		Basedrtt = lrtt //20 * 1000000 // change into millisecond 20
 	}
 	if ObservedRtt == 0 {
-		ObservedRtt = 7 * 1000000 // change into millisecond, optimal values
+		ObservedRtt = lrtt //20 * 1000000 // change into millisecond, optimal values 20
 	}
 	if currentCongestionWindow == 0 {
 		currentCongestionWindow = protocol.InitialCongestionWindow
 	}
-
+	// Expected Rate
+	var Expr = float64(currentCongestionWindow) / float64(Basedrtt)
+	// Actual Rate
+	var Actr = float64(currentCongestionWindow) / float64(ObservedRtt)
+	if Actr > Expr {
+		v.BasedRtt = lrtt
+	}
 	// Diff equal expected cwnd/basedrtt minus actual cwnd/observedrtt
-	Diff = float64(currentCongestionWindow)/float64(Basedrtt) - float64(currentCongestionWindow)/float64(ObservedRtt)
-	//fmt.Println("Basedrtt: ", Basedrtt, " Cwmd: ", currentCongestionWindow, " ObservedRtt: ", ObservedRtt, "Diff", Diff)
+	Diff = Expr - Actr
+	//fmt.Println(Expr, Actr, time.Now().UnixNano())
 	Delta = Diff
 	return Diff
 }
 
 // CwndVegasduringCA computes a new congestion window to use at the beginning or after
 // a loss event. Returns the new congestion window in packets.
-func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber, biF protocol.ByteCount) protocol.PacketNumber {
-	//fmt.Println("Time in Avoidance.", time.Now().Nanosecond())
-	var TarCwnd protocol.PacketNumber = currentCongestionWindow
-	// if TarCwnd > Maxcwnd {
-	// 	TarCwnd = Maxcwnd
-	// }
+func (v *Vegas) CwndVegasduringCA(currentCongestionWindow protocol.PacketNumber, biF protocol.ByteCount, ssthresh protocol.PacketNumber) protocol.PacketNumber {
+
 	// Latest RTT from rtt_stats
 	var lrtt1 = lrtt
 	// Latest minRTT from rtt_stats
 	var mrtt1 = mrtt
 	// Observed RTT from latest RTT
 	v.ObRtt = lrtt1
+
 	//Checking if BasedRtt equal 0. Set a parameter for Based RTT
 	if v.BasedRtt == 0 {
-		v.BasedRtt = lrtt1 //5 * 1000000
+		v.BasedRtt = 20 //* 1000000
 	}
 	// If Basedrtt bigger that latest min RTT, get value from mrtt1
 	if v.BasedRtt > mrtt1 {
-		v.BasedRtt = mrtt1
+		v.BasedRtt = mrtt
 	}
-	// Checking if ObRTT is smaller than min RTT, if smaller get new BasedRTT
+	// Checking if ObRTT is smaller than based RTT, if smaller get new BasedRTT
 	if v.ObRtt < v.BasedRtt {
 		v.BasedRtt = v.ObRtt
 	}
+
+	// Calculate the target Cwnd
+	var TarCwnd protocol.PacketNumber = currentCongestionWindow * protocol.PacketNumber(v.BasedRtt/mrtt1)
+
 	// Calculate Difference value based on the BasedRTT, ObservedRTT and the congestion window in the mean time
 	var Diff float64 = v.Difference(v.BasedRtt, lrtt1, currentCongestionWindow)
-	if Diff < float64(Valpha)/float64(v.BasedRtt) {
-		TarCwnd = TarCwnd + 3
 
-	} else if Diff >= float64(Valpha)/float64(v.BasedRtt) && float64(Diff) <= float64(Vbeta)/float64(v.BasedRtt) {
-		TarCwnd = currentCongestionWindow
+	if Diff > float64(Vgamma) && currentCongestionWindow <= ssthresh {
+		currentCongestionWindow = utils.MinPacketNumber(ssthresh, TarCwnd+1)
+		ss = TarCwnd / 2
+	} else if currentCongestionWindow < ssthresh {
+		// Slow start
+	} else {
 
-	} else if Diff > float64(Vbeta)/float64(v.BasedRtt) {
-		TarCwnd = TarCwnd - 3
+		if Diff < float64(Valpha) {
+			TarCwnd = TarCwnd + 1
+
+		} else if Diff > float64(Vbeta) {
+			TarCwnd = TarCwnd - 1
+		} else {
+			TarCwnd = currentCongestionWindow
+		}
 	}
-	//fmt.Println("++++ ACK ++++")
-	//fmt.Println("Tarcwnd in ACK:", TarCwnd, "Cwnd:", currentCongestionWindow, "biF:", biF, "BasedRTT:", mrtt1, "ObservedRTT", lrtt)
-	//fmt.Println("++++++++++++++++++++++++++++++++++++++++")
-	//fmt.Println("LatestRTT", lrtt1, "timestamp", time.Now().Unix())
-	v.lastCongestionWindow = TarCwnd
-	return TarCwnd
+
+	return TarCwnd * 5
 }
 
 // CwndVegascheckAPL check if it is needed to change to CWND or not. Returns the new congestion window in packets.
 func (v *Vegas) CwndVegascheckAPL(currentCongestionWindow protocol.PacketNumber, packetlost int, biF protocol.ByteCount) protocol.PacketNumber {
-	//fmt.Println("Time get Packetloss:", time.Now().Nanosecond())
 	var TarCwnd protocol.PacketNumber
-	// if TarCwnd > Maxcwnd {
-	// 	TarCwnd = Maxcwnd / 2
-	// }
-	// Counting the packets lost , if the after 30th packet it still losing, it will decrease Cwnd/2
-	// If not, keep the cwnd.
 
-	if checking+29 < packetlost {
-		TarCwnd = currentCongestionWindow / 2
-
+	if currentCongestionWindow < v.lastMaxCongestionWindow {
+		// We never reached the old max, so assume we are competing with another flow.
+		v.lastMaxCongestionWindow = protocol.PacketNumber(betaLastMax * float32(currentCongestionWindow))
 	} else {
-		TarCwnd = currentCongestionWindow + 3
-		//checking = packetlost
+		v.lastMaxCongestionWindow = currentCongestionWindow
 	}
-	//fmt.Println("++++ APL ++++")
-	//fmt.Println("TarCwnd in APL:", TarCwnd, "Cwnd:", currentCongestionWindow, "Packetlost count:", packetlost, "biF:", biF, "BasedRTT:", mrtt, "ObservedRTT", lrtt)
-	//fmt.Println("++++++++++++++++++++++++++++++++++++++++")
-	return TarCwnd
+	v.epoch = time.Time{} // Reset time.
+
+	if currentCongestionWindow < v.lastMaxCongestionWindow {
+		// We never reached the old max, so assume we are competing with another
+		// flow. Use our extra back off factor to allow the other flow to go up.
+		v.lastMaxCongestionWindow = protocol.PacketNumber(betaLastMax * float32(currentCongestionWindow))
+	} else {
+		v.lastMaxCongestionWindow = currentCongestionWindow
+	}
+	v.epoch = time.Time{} // Reset time.
+	TarCwnd = protocol.PacketNumber(float32(currentCongestionWindow) * 0.7)
+
+	return TarCwnd * 5
 }

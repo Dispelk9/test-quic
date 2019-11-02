@@ -11,6 +11,12 @@ import (
 // Pktl Count Packet lost
 var Pktl int
 
+// Count RTT for vegas
+var rttc time.Duration
+
+// cnt the Rtt sample
+var cnt uint32
+
 // VegasSender is a Struct
 type VegasSender struct {
 	hybridSlowStart HybridSlowStart
@@ -76,116 +82,142 @@ func NewVegasSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 		numConnections:             defaultNumConnections,
 		vegas:                      NewVegas(0),
 		DupAck:                     checkDup,
+		reno:                       reno,
 	}
 }
 
 // OnPacketSent for vegas
 func (v *VegasSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) bool {
-	// Only update bytesInFlight for data packets.
-	var latest = lrtt
-	var min = mrtt
-	var delay = ackd
-	var timeout time.Duration
-	var deltavalue float64 = Delta
-	// Checking if delay too high?
-	if delay > timeout {
-		// Timeout , retransmit immediately
-		// This part has done in sentpackethandler.go
-	}
-	// Incase min equal zero, set sample for minRTT
-	if min == 0 {
-		min = lrtt //Convert to millisecond
-	}
-	if v.congestionWindow < 28 {
-		v.congestionWindow++
-	} else {
-		v.congestionWindow = v.congestionWindow / 2
-	}
-	if v.InSlowStart() {
-		//fmt.Println(v.congestionWindow, "InSlowstart:", time.Now().UnixNano(), lrtt)
+	if !isRetransmittable {
+		return false
 	}
 	if v.InRecovery() {
-		//fmt.Println(v.congestionWindow, "InRecovery:", time.Now().UnixNano(), lrtt)
+		v.vegas.lastCongestionWindow = v.congestionWindow
 	}
 
-	// Based Rtt equal min RTT
-	var BasedRtt = min
-	// Observed Rtt equal latest RTT
-	var Observed = latest
-
-	// The expected throughput
-	var Ex float64 = float64(bytesInFlight) / float64(BasedRtt)
-
-	// The actual throughput
-	var Act float64 = float64(bytesInFlight) / float64(Observed)
-
-	//Checking for new slow start
-	if Ex-Act < deltavalue {
-		if v.congestionWindow < 28 { // Make the cwnd not get over the max link bandwidth
-			v.congestionWindow++
-		} else {
-			v.congestionWindow = v.congestionWindow / 2
-		}
-
-	} else if Ex-Act > deltavalue {
-		// Expected congestion, start CA
-		//v.ExitSlowstart()
-		v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
-		//fmt.Println(v.congestionWindow, "InCA:", time.Now().UnixNano(), lrtt)
+	if v.InRecovery() {
+		// PRR is used when in recovery.
+		v.prr.OnPacketSent(bytes)
 	}
-	//fmt.Println("Expected Throughput:", Ex, "Actual Throughput:", Act)
 
+	v.largestSentPacketNumber = packetNumber
+	v.hybridSlowStart.OnPacketSent(packetNumber)
+	fmt.Println(v.congestionWindow, time.Now().UnixNano(), lrtt)
 	return true
 }
 
 // OnPacketAcked for vegas. Called when we receive an ack,, maybe occur in SS symbol(1) or CA symbol(0)
 func (v *VegasSender) OnPacketAcked(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	v.congestionWindow = protocol.PacketNumber(bytesInFlight) / 1350
-	// If in slow start ,working normal
-	if v.InSlowStart() {
-		if v.congestionWindow < Maxcwnd {
-			v.congestionWindow++
-		} else {
-			v.congestionWindow = v.congestionWindow / 2
-		}
-
-		// If in recovery, do nthing, cwnd stay the same
-	} else if v.InRecovery() {
-		//fmt.Println("In Recovery")
-		// always applies algorithms checking cwnd
-	} else {
-		// Always increase cwnd till max
-		if v.congestionWindow > Maxcwnd {
-			v.congestionWindow = v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight)
-		} else {
-			// checking the RTT
-			v.congestionWindow++
-		}
-
+	v.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, v.largestAckedPacketNumber)
+	if v.InRecovery() {
+		// PRR is used when in recovery
+		v.prr.OnPacketAcked(ackedBytes)
+		return
 	}
-	fmt.Println("Timestamp", time.Now().UnixNano(), "LatestRTT", lrtt)
+	//v.vegas.UpdateAckedSinceLastLoss(ackedBytes)
+	v.maybeIncreaseCwnd(ackedPacketNumber, ackedBytes, bytesInFlight)
+	if v.InSlowStart() {
+		v.hybridSlowStart.OnPacketAcked(ackedPacketNumber)
+	}
+	//fmt.Println(v.congestionWindow, time.Now().UnixNano())
+
+}
+func (v *VegasSender) maybeIncreaseCwnd(ackedPacketNumber protocol.PacketNumber, ackedBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
+	// Do not increase the congestion window unless the sender is close to using
+	// the current window.
+	if !v.isCwndLimited(bytesInFlight) {
+		return
+	}
+	if v.congestionWindow >= v.maxTCPCongestionWindow {
+		return
+	}
+	// if v.congestionWindow < v.slowstartThreshold {
+	// 	v.hybridSlowStart.Restart()
+	// }
+	// checking the RTT, it get new RTT with each new sample from RTT_Stats
+	if rttc == 0 {
+		rttc = lrtt
+	}
+	// Only update the congestion window when count (cnt) is bigger than 3, with
+	// each new RTT, count increases.
+	if lrtt != rttc {
+		cnt = cnt + 1
+	}
+	if cnt >= 3 {
+		if v.InSlowStart() {
+			v.congestionWindow++
+			//fmt.Println("In SLowstart")
+		} else {
+			//fmt.Println("In CA")
+			v.congestionWindow = v.vegas.CwndVegasduringCA(v.congestionWindow, bytesInFlight, v.slowstartThreshold)
+		}
+		cnt = 0
+	} else {
+		// We don't have enough RTT samples to do the Vegas
+		// calculation, so we'll behave like Reno.
+
+		if v.InSlowStart() {
+			v.congestionWindow++
+		} else {
+			// Classic Reno congestion avoidance.
+			v.congestionWindowCount++
+			// Divide by num_connections to smoothly increase the CWND at a faster
+			// rate than conventional Reno.
+			if protocol.PacketNumber(v.congestionWindowCount*protocol.ByteCount(v.numConnections)) >= v.congestionWindow {
+				v.congestionWindow++
+
+				v.congestionWindowCount = 0
+			}
+			v.slowstartThreshold = ss
+		}
+	}
+	//fmt.Println(cnt)
 }
 
 // OnPacketLost for vegas works when a packet is missing , maybe occur in SS or CA
 func (v *VegasSender) OnPacketLost(packetNumber protocol.PacketNumber, lostBytes protocol.ByteCount, bytesInFlight protocol.ByteCount) {
-	// Count number pkt lost
+	// Count Packet lost
 	Pktl = Pktl + 1
+	if Pktl > 3 {
+		if packetNumber <= v.largestSentAtLastCutback {
+			if v.lastCutbackExitedSlowstart {
+				v.stats.slowstartPacketsLost++
+				v.stats.slowstartBytesLost += lostBytes
+				if v.slowStartLargeReduction {
+					if v.stats.slowstartPacketsLost == 1 || (v.stats.slowstartBytesLost/protocol.DefaultTCPMSS) > (v.stats.slowstartBytesLost-lostBytes)/protocol.DefaultTCPMSS {
+						// Reduce congestion window by 1 for every mss of bytes lost.
+						v.congestionWindow = utils.MaxPacketNumber(v.congestionWindow-1, v.minCongestionWindow)
+					}
+					v.slowstartThreshold = v.congestionWindow
+				}
+			}
+			return
+		}
+		v.lastCutbackExitedSlowstart = v.InSlowStart()
+		if v.InSlowStart() {
+			v.stats.slowstartPacketsLost++
+		}
 
-	v.lastCutbackExitedSlowstart = v.InSlowStart()
-	if v.InSlowStart() {
-		v.stats.slowstartPacketsLost++
-	} else if v.congestionWindow > Maxcwnd {
-		v.congestionWindow = Maxcwnd / 2
-	} else if v.InRecovery() {
-		fmt.Println("In Recovery")
-	} else {
-		//if Realtp < Expectedtp {
-		// After Packet Loss in CA
-		v.congestionWindow = v.vegas.CwndVegascheckAPL(v.congestionWindow, Pktl, bytesInFlight) // Check van de vegas lam gi khi bi drop packets
+		v.prr.OnPacketLost(bytesInFlight)
+		//v.vegas.OnPacketLost()
 
+		// TODO(chromium): Separate out all of slow start into a separate class.
+		if v.slowStartLargeReduction && v.InSlowStart() {
+			v.congestionWindow = v.congestionWindow - 1
+		} else {
+			v.congestionWindow = v.vegas.CwndVegascheckAPL(v.congestionWindow, Pktl, bytesInFlight)
+		}
+		// Enforce a minimum congestion window.
+		if v.congestionWindow < v.minCongestionWindow {
+			v.congestionWindow = v.minCongestionWindow
+		}
+		v.slowstartThreshold = v.congestionWindow
+		v.largestSentAtLastCutback = v.largestSentPacketNumber
+		// reset packet count from congestion avoidance mode. We start
+		// counting again when we're out of recovery.
+		v.congestionWindowCount = 0
+		Pktl = 0
 	}
-
-	v.prr.OnPacketLost(bytesInFlight)
 }
 
 // MaybeExitSlowStart for vegas
@@ -281,4 +313,26 @@ func (v *VegasSender) TimeUntilSend(now time.Time, bytesInFlight protocol.ByteCo
 		return 0
 	}
 	return utils.InfDuration
+}
+
+// isCwndLimited checking if cwnd is limited by program or not
+func (v *VegasSender) isCwndLimited(bytesInFlight protocol.ByteCount) bool {
+
+	congestionWindow := v.GetCongestionWindow()
+	if bytesInFlight >= congestionWindow {
+
+		return true
+	}
+	availableBytes := congestionWindow - bytesInFlight
+	slowStartLimited := v.InSlowStart() && bytesInFlight > congestionWindow/2
+
+	return slowStartLimited || availableBytes <= maxBurstBytes
+}
+
+func (v *VegasSender) RenoBeta() float32 {
+	// kNConnectionBeta is the backoff factor after loss for our N-connection
+	// emulation, which emulates the effective backoff of an ensemble of N
+	// TCP-Reno connections on a single loss event. The effective multiplier is
+	// computed as:
+	return (float32(v.numConnections) - 1. + renoBeta) / float32(v.numConnections)
 }

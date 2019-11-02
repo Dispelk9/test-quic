@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -102,7 +101,7 @@ func (s *HybridSlowStart) OnPacketAcked(ackedPacketNumber protocol.PacketNumber)
 
 // Started returns true if started
 func (s *HybridSlowStart) Started() bool {
-	fmt.Println("StartSlowStart")
+	//fmt.Println("StartSlowStart")
 	return s.started
 }
 
@@ -110,5 +109,5 @@ func (s *HybridSlowStart) Started() bool {
 func (s *HybridSlowStart) Restart() {
 	s.started = false
 	s.hystartFound = false
-	fmt.Println("GotoSlowStartAgain ")
+	//fmt.Println("GotoSlowStartAgain")
 }
