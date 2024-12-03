@@ -3,7 +3,7 @@ module github.com/lucas-clemente/quic-go
 go 1.12
 
 require (
-	github.com/bifurcation/mint v0.0.0-20171208053358-a6080d464fb5
+	github.com/bifurcation/mint v0.0.0-20171208133358-a6080d464fb5
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.1
