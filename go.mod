@@ -13,8 +13,8 @@ require (
 	github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cced
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
-	golang.org/x/crypto v0.0.0-20201216223049-8b5274cf687f
-	golang.org/x/net v0.7.0
+	golang.org/x/crypto v0.17.0
+	golang.org/x/net v0.23.0
 	golang.org/x/sync v0.0.0-20190412183630-56d357773e84 // indirect
 	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
